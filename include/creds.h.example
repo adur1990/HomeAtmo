@@ -1,0 +1,6 @@
+# THIS FILE CONTAINS DIFFERENT SENSITIVE INFORMATION.
+
+static const char* IFTTT = "INSERT URL HERE";
+
+static const char *SSID = "ISERT YOUR SSID HERE";
+static const char *PSK = "INSERT YOUR PSK HERE";

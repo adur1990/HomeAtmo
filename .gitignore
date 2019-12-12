@@ -1,5 +1,5 @@
 ### Custom ###
-ifttt.h
+creds.h
 
 # Created by https://www.gitignore.io/api/c,c++,macos,platformio,visualstudiocode
 # Edit at https://www.gitignore.io/?templates=c,c++,macos,platformio,visualstudiocode
