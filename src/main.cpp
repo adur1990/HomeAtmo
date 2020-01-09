@@ -6,10 +6,19 @@
 #include "Adafruit_BME680.h"
 
 #include "WiFi.h"
+#include <HTTPClient.h>
 #include <ESPAsyncWebServer.h>
 
 #include "html.h"
 #include "creds.h"
+
+/******* Timer Variables *******/
+bool sent_today = false;
+hw_timer_t * timer = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+uint64_t day = 1000000 * 60 * 60 * 24;
+uint64_t hour = 1000 * 60 * 60;
+int last_time = 0;
 
 /******* Sensor Variables *******/
 #define SEALEVELPRESSURE_HPA (1013.25)
@@ -26,7 +35,7 @@ int   getgasreference_count = 0;
 
 /******* WiFi Variables *******/
 AsyncWebServer server(80);
-
+HTTPClient http;
 
 String getTemperature() {
   float t = bme.readTemperature();
@@ -114,8 +123,21 @@ String getIAQ(){
   return String(air_quality_score);
 }
 
+void IRAM_ATTR resetSent() {
+  portENTER_CRITICAL_ISR(&timerMux);
+  sent_today = false;
+  portEXIT_CRITICAL_ISR(&timerMux);
+
+}
+
 void setup() {
     Serial.begin(115200);
+
+    Serial.println("#### Setting up Timer");
+    timer = timerBegin(0, 80, true);
+    timerAttachInterrupt(timer, &resetSent, true);
+    timerAlarmWrite(timer, day, true);
+    timerAlarmEnable(timer);
 
     Serial.println("#### Setting up Sensors");
     Wire.begin();
@@ -172,4 +194,29 @@ void setup() {
 }
 
 void loop() {
+    if(millis() - last_time > hour && !sent_today) {
+      float iaq = getIAQ().toFloat();
+      if (iaq > 50) {
+        portENTER_CRITICAL(&timerMux);
+        sent_today = true;
+        portEXIT_CRITICAL(&timerMux);
+        Serial.println("BAD QUALITY");
+
+        http.begin(IFTTT);
+        http.addHeader("Content-Type", "application/json");
+        int httpResponseCode = http.POST("{\"value1\":\"" + String(iaq) + "\"}");
+
+        if (httpResponseCode > 0) {
+          String response = http.getString();
+          Serial.println(httpResponseCode);
+          Serial.println(response);
+        } else {
+          Serial.print("Error on sending POST: ");
+          Serial.println(httpResponseCode);
+        }
+
+        http.end();
+      }
+      last_time = millis();
+    }
 }
