@@ -66,9 +66,9 @@ String getPressure() {
 
 void getGasReference(){
   // Now run the sensor for a burn-in period, then use combination of relative humidity and gas resistance to estimate indoor air quality as a percentage.
-  Serial.println("Getting a new gas reference value");
-  int readings = 10;
-  for (int i = 1; i <= readings; i++){ // read gas for 10 x 0.150mS = 1.5secs
+  Serial.println("#### Getting a new gas reference value");
+  int readings = 5;
+  for (int i = 1; i <= readings; i++){
     gas_reference += bme.readGas();
   }
   gas_reference = gas_reference / readings;
@@ -106,7 +106,7 @@ String getIAQ(){
   float score = hum_score + gas_score;
   float air_quality_score = (100 - score) * 5;
 
-  if ((getgasreference_count++) % 10 == 0) {
+  if ((++getgasreference_count) % 10 == 0) {
       getGasReference();
   }
 
