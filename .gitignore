@@ -25,7 +25,6 @@ creds.h
 
 # Libraries
 *.lib
-*.a
 *.la
 *.lo
 
