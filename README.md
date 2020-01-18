@@ -12,6 +12,7 @@ Second, every 30 minutes, the IAQ is checked.
 If the IAQ gets unhealthy, a HTTP POST request is sent to the IFTTT WebHook, which notifies you about the IAQ.
 
 ## DIY
+**Disclaimer: this project uses the proprietary [Bosch Sensortec Environmental Cluster (BSEC) Arduino Library](https://github.com/BoschSensortec/BSEC-Arduino-library) with their own [license](https://github.com/BoschSensortec/BSEC-Arduino-library/blob/master/LICENSE). If you do not agree with this license, you can not use this software. Everything not from the BSEC library uses the GPL 3.0 license**
 ### Software
 #### IFTTT
 I use IFTTT for sending me notifications when the IAQ gets unhealthy.
