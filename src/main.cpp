@@ -8,6 +8,7 @@
 #include "WiFi.h"
 #include <HTTPClient.h>
 #include <ESPAsyncWebServer.h>
+#include <movingAvg.h>
 
 #include "html.h"
 #include "creds.h"
@@ -32,6 +33,8 @@ const uint8_t bsec_config_iaq[] = {
 Bsec sensor;
 uint8_t bsec_state[BSEC_MAX_STATE_BLOB_SIZE] = {0};
 uint16_t state_update_counter = 0;
+
+movingAvg iaqAvg(10);
 
 void check_IAQ_sensor_status(void);
 void load_state(void);
@@ -144,6 +147,8 @@ void setup() {
     sensor.updateSubscription(sensor_list, 5, BSEC_SAMPLE_RATE_LP);
     check_IAQ_sensor_status();
 
+    iaqAvg.begin();
+
     Serial.print("#### Connecting to WiFi");
     WiFi.begin(SSID, PSK);
 
@@ -211,8 +216,9 @@ void loop() {
         temperature = sensor.temperature;
         pressure = sensor.pressure;
         humidity = sensor.humidity;
-        iaq = sensor.iaq;
         co2Equivalent = sensor.co2Equivalent;
+        iaq = iaqAvg.reading(sensor.iaq);
+
         update_state();
     } else {
         check_IAQ_sensor_status();
