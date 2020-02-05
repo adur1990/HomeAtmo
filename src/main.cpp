@@ -34,7 +34,7 @@ Bsec sensor;
 uint8_t bsec_state[BSEC_MAX_STATE_BLOB_SIZE] = {0};
 uint16_t state_update_counter = 0;
 
-movingAvg iaqAvg(10);
+movingAvg iaq_avg(6);
 
 void check_IAQ_sensor_status(void);
 void load_state(void);
@@ -147,7 +147,7 @@ void setup() {
     sensor.updateSubscription(sensor_list, 5, BSEC_SAMPLE_RATE_LP);
     check_IAQ_sensor_status();
 
-    iaqAvg.begin();
+    iaq_avg.begin();
 
     Serial.print("#### Connecting to WiFi");
     WiFi.begin(SSID, PSK);
@@ -217,7 +217,7 @@ void loop() {
         pressure = sensor.pressure;
         humidity = sensor.humidity;
         co2Equivalent = sensor.co2Equivalent;
-        iaq = iaqAvg.reading(sensor.iaq);
+        iaq = iaq_avg.reading(sensor.iaq);
 
         update_state();
     } else {
