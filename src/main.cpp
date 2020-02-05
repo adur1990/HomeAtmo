@@ -181,6 +181,9 @@ void setup() {
     server.on("/iaq", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send_P(200, "text/plain", String(iaq).c_str());
     });
+    server.on("/iaq_avg", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/plain", String(iaq_avg.getAvg()).c_str());
+    });
     server.on("/co2", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send_P(200, "text/plain", String(co2Equivalent).c_str());
     });
@@ -191,7 +194,7 @@ void setup() {
 
 void loop() {
     if (millis() - last_check > hour) {
-        if (iaq > 100) {
+        if (iaq_avg.getAvg() > 100) {
             Serial.println("BAD QUALITY");
 
             http.begin(IFTTT);
@@ -217,7 +220,8 @@ void loop() {
         pressure = sensor.pressure;
         humidity = sensor.humidity;
         co2Equivalent = sensor.co2Equivalent;
-        iaq = iaq_avg.reading(sensor.iaq);
+        iaq = sensor.iaq;
+        iaq_avg.reading(iaq);
 
         update_state();
     } else {
