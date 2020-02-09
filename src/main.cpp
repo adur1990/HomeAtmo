@@ -180,9 +180,9 @@ void setup() {
 
     tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA ,"HomeAtmo");
     Serial.println("#### WiFi connected.");
-    Serial.println("#### IP address: ");
+    Serial.print("#### IP address: ");
     Serial.println(WiFi.localIP());
-    Serial.println("#### Hostname: ");
+    Serial.print("#### Hostname: ");
     Serial.println(WiFi.getHostname());
 
     // Route for root / web page
