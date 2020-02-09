@@ -13,11 +13,14 @@
 #include "html.h"
 #include "creds.h"
 
-/******* TIMER VARIABLES *******/
+/******* TIMER/TASK VARIABLES *******/
 uint64_t hour = 1000 * 60 * 60;
 uint64_t minute = 1000 * 60;
+uint64_t second = 1000;
 int last_check = 0;
 uint64_t last_ifttt = 0;
+TaskHandle_t iaq_task;
+SemaphoreHandle_t mutex = NULL;
 
 /******* WI-FI VARIABLES *******/
 AsyncWebServer server(80);
@@ -121,6 +124,23 @@ void check_IAQ_sensor_status(void) {
     }
 }
 
+void get_iaq(void *param) {
+    for(;;) {
+        xSemaphoreTake(mutex, portMAX_DELAY);
+        if (sensor.run()) {
+            iaq = sensor.iaq;
+            iaq_avg.reading(iaq);
+
+            update_state();
+        } else {
+            check_IAQ_sensor_status();
+        }
+        xSemaphoreGive(mutex);
+
+        vTaskDelay((second * 11) / portTICK_PERIOD_MS);
+    }
+}
+
 void setup() {
     Serial.begin(115200);
 
@@ -190,6 +210,18 @@ void setup() {
 
     server.begin();
     Serial.println("#### Server Started.");
+
+    Serial.println("#### Setting up IAQ task.");
+    vSemaphoreCreateBinary(mutex);
+    xTaskCreatePinnedToCore(
+        get_iaq,
+        "get_iaq",
+        10000,
+        NULL,
+        5,
+        &iaq_task,
+        0);
+    vTaskDelay((second * 5) / portTICK_PERIOD_MS);
 }
 
 void loop() {
@@ -215,18 +247,18 @@ void loop() {
         last_check = millis();
     }
 
+    xSemaphoreTake(mutex, portMAX_DELAY);
     if (sensor.run()) {
         temperature = sensor.temperature;
         pressure = sensor.pressure;
         humidity = sensor.humidity;
         co2Equivalent = sensor.co2Equivalent;
-        iaq = sensor.iaq;
-        iaq_avg.reading(iaq);
 
         update_state();
     } else {
         check_IAQ_sensor_status();
     }
+    xSemaphoreGive(mutex);
 
     vTaskDelay((minute * 5) / portTICK_PERIOD_MS);
 }
