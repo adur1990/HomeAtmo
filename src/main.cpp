@@ -14,13 +14,11 @@
 #include "creds.h"
 
 /******* TIMER/TASK VARIABLES *******/
-uint64_t hour = 1000 * 60 * 60;
-uint64_t minute = 1000 * 60;
 uint64_t second = 1000;
+uint64_t minute = second * 60;
+uint64_t hour = minute * 60;
 int last_check = 0;
 uint64_t last_ifttt = 0;
-TaskHandle_t iaq_task;
-SemaphoreHandle_t mutex = NULL;
 
 /******* WI-FI VARIABLES *******/
 AsyncWebServer server(80);
@@ -36,8 +34,6 @@ const uint8_t bsec_config_iaq[] = {
 Bsec sensor;
 uint8_t bsec_state[BSEC_MAX_STATE_BLOB_SIZE] = {0};
 uint16_t state_update_counter = 0;
-
-movingAvg iaq_avg(6);
 
 void check_IAQ_sensor_status(void);
 void load_state(void);
@@ -124,23 +120,6 @@ void check_IAQ_sensor_status(void) {
     }
 }
 
-void get_iaq(void *param) {
-    for(;;) {
-        xSemaphoreTake(mutex, portMAX_DELAY);
-        if (sensor.run()) {
-            iaq = sensor.iaq;
-            iaq_avg.reading(iaq);
-
-            update_state();
-        } else {
-            check_IAQ_sensor_status();
-        }
-        xSemaphoreGive(mutex);
-
-        vTaskDelay((second * 11) / portTICK_PERIOD_MS);
-    }
-}
-
 void setup() {
     Serial.begin(115200);
 
@@ -166,8 +145,6 @@ void setup() {
 
     sensor.updateSubscription(sensor_list, 5, BSEC_SAMPLE_RATE_LP);
     check_IAQ_sensor_status();
-
-    iaq_avg.begin();
 
     Serial.print("#### Connecting to WiFi");
     WiFi.begin(SSID, PSK);
@@ -201,32 +178,17 @@ void setup() {
     server.on("/iaq", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send_P(200, "text/plain", String(iaq).c_str());
     });
-    server.on("/iaq_avg", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/plain", String(iaq_avg.getAvg()).c_str());
-    });
     server.on("/co2", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send_P(200, "text/plain", String(co2Equivalent).c_str());
     });
 
     server.begin();
     Serial.println("#### Server Started.");
-
-    Serial.println("#### Setting up IAQ task.");
-    vSemaphoreCreateBinary(mutex);
-    xTaskCreatePinnedToCore(
-        get_iaq,
-        "get_iaq",
-        10000,
-        NULL,
-        5,
-        &iaq_task,
-        0);
-    vTaskDelay((second * 5) / portTICK_PERIOD_MS);
 }
 
 void loop() {
     if (millis() - last_check > hour) {
-        if (iaq_avg.getAvg() > 100) {
+        if (iaq > 100) {
             Serial.println("BAD QUALITY");
 
             http.begin(IFTTT);
@@ -247,18 +209,17 @@ void loop() {
         last_check = millis();
     }
 
-    xSemaphoreTake(mutex, portMAX_DELAY);
     if (sensor.run()) {
         temperature = sensor.temperature;
         pressure = sensor.pressure;
         humidity = sensor.humidity;
         co2Equivalent = sensor.co2Equivalent;
+        iaq = sensor.iaq;
 
         update_state();
     } else {
         check_IAQ_sensor_status();
     }
-    xSemaphoreGive(mutex);
 
-    vTaskDelay((minute * 5) / portTICK_PERIOD_MS);
+    vTaskDelay((second * 5) / portTICK_PERIOD_MS);
 }
