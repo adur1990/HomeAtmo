@@ -2,25 +2,17 @@
 Simple ESP32 based BME680 indoor air quality sensor.
 
 ## Overview
-This is a very basic project, which reads the sensor values from a BME680 sensor (gas, pressure, temperature & humidity) and computes the [Indoor Air Quality (IAQ)](https://en.wikipedia.org/wiki/Indoor_air_quality).
-If the IAQ reaches non-healthy values, an HTTP request is sent to an IFTTT webhook, which in turn sends a notification about the air quality so I can open the window.
-Additionally, a simple HTTP server is used to show the current sensor values as well as a few historic data points.
-
-The code consists of two parts:
-First, it contains an HTTP server, which shows you four graphs when you go to `http://<ESP32_IP>/`, temperature, pressure, humidity and IAQ.
-Second, every 30 minutes, the IAQ is checked.
-If the IAQ gets unhealthy, a HTTP POST request is sent to the IFTTT WebHook, which notifies you about the IAQ.
+This is a very basic project, which reads the sensor values from a BME680 sensor (temperature, humidity VOC, CO2 air quality) and computes the [Indoor Air Quality (IAQ)](https://en.wikipedia.org/wiki/Indoor_air_quality) and implemented as an HomeKit Accessory.
 
 ## DIY
 **Disclaimer: this project uses the proprietary [Bosch Sensortec Environmental Cluster (BSEC) Arduino Library](https://github.com/BoschSensortec/BSEC-Arduino-library) with their own [license](https://github.com/BoschSensortec/BSEC-Arduino-library/blob/master/LICENSE). If you do not agree with this license, you can not use this software. Everything not from the BSEC library uses the GPL 3.0 license**
 ### Software
-#### IFTTT
-I use IFTTT for sending me notifications when the IAQ gets unhealthy.
-To do so, I created an simple IFTTT applet, which receives an HTTP POST using a WebHook and sends a notification through the IFTTT iOS app as a result.
-Get your IFTTT WebHook URL in the WebHook settings and provide it in the `creds.h` file.
+#### HomeKit
+All relevant HomeKit information has to be given in the `creds.h` file.
+Use `include/creds.h.example` as a reference.
 
 #### Wi-Fi
-To be able to connect to your Wi-Fi network, provide your SSID and PSK in the `creds.h` file.
+To be able to connect to your Wi-Fi network, provide your SSID and PSK in the `creds.h` file (see above).
 
 #### Flashing
 This project uses [PlatformIO](https://platformio.org), which makes it pretty easy to deploy the code.

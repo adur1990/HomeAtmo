@@ -1,6 +1,11 @@
 # THIS FILE CONTAINS DIFFERENT SENSITIVE INFORMATION.
 
-static const char* IFTTT = "INSERT URL HERE";
+#define ACCESSORY_NAME  ("HomeAtmo")    // The name your accessory will apear as in HomeKit
+#define ACCESSORY_SN  ("ASN")           // An arbitrary serial number. Will be shown in the device config in the Home app.
+#define ACCESSORY_MANUFACTURER ("AMF")  // An arbitrary manufacturer. Will be shown in the device config in the Home app.
+#define ACCESSORY_MODEL  ("AM")         // An arbitrary model. Will be shown in the device config in the Home app.
+#define FIRMWARE_REVISION  ("0.1")      // An arbitrary firmware revision. Will be shown in the device config in the Home app.
+#define HOMEKIT_PASSWORD ("111-22-333") // During setup, this password will be asked.
 
 static const char *SSID = "ISERT YOUR SSID HERE";
 static const char *PSK = "INSERT YOUR PSK HERE";

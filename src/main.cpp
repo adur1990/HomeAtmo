@@ -1,102 +1,35 @@
 /******* INCLUDES *******/
 #include <Arduino.h>
-
-#include <EEPROM.h>
 #include <Wire.h>
+#include <WiFi.h>
+#include <ESPmDNS.h>
+
+#include <homekit/types.h>
+#include <homekit/homekit.h>
+#include <homekit/characteristics.h>
+#include <arduino_homekit_server.h>
+
 #include "bsec.h"
-
-#include "WiFi.h"
-#include <HTTPClient.h>
-#include <ESPAsyncWebServer.h>
-#include <movingAvg.h>
-
-#include "html.h"
 #include "creds.h"
 
-/******* TIMER/TASK VARIABLES *******/
+
+/******* TIMER *******/
 uint64_t second = 1000;
-uint64_t minute = second * 60;
-uint64_t hour = minute * 60;
-int last_check = 0;
-uint64_t last_ifttt = 0;
 
-/******* WI-FI VARIABLES *******/
-AsyncWebServer server(80);
-HTTPClient http;
 
-/******* SENSOR VARIABLES *******/
-const uint8_t bsec_config_iaq[] = {
-    #include "bsec_iaq.txt"
-};
-
-#define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000) // 360 minutes - 4 times a day
-
+/******* SENSOR *******/
 Bsec sensor;
-uint8_t bsec_state[BSEC_MAX_STATE_BLOB_SIZE] = {0};
-uint16_t state_update_counter = 0;
-
 void check_IAQ_sensor_status(void);
-void load_state(void);
-void update_state(void);
 
-float temperature = 0.0;
-float pressure = 0.0;
-float humidity = 0.0;
-float iaq = 0.0;
-float co2Equivalent = 0.0;
 
-void load_state(void) {
-    if (EEPROM.read(0) == BSEC_MAX_STATE_BLOB_SIZE) {
-        Serial.println("#### Reading state from EEPROM:");
+/******* HOMEKIT VARIABLES *******/
+extern "C" homekit_server_config_t homekit_config;
+extern "C" homekit_characteristic_t temperature_chara;
+extern "C" homekit_characteristic_t humidity_chara;
+extern "C" homekit_characteristic_t iaq_chara;
+extern "C" homekit_characteristic_t co2_chara;
+extern "C" homekit_characteristic_t voc_chara;
 
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++) {
-            bsec_state[i] = EEPROM.read(i + 1);
-            Serial.print(bsec_state[i], HEX);
-        }
-        Serial.println("");
-
-        sensor.setState(bsec_state);
-        check_IAQ_sensor_status();
-    } else {
-        Serial.println("#### Erasing EEPROM");
-
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE + 1; i++) {
-            EEPROM.write(i, 0);
-        }
-
-        EEPROM.commit();
-    }
-}
-
-void update_state(void) {
-    bool update = false;
-    if (state_update_counter == 0) {
-        if (sensor.iaqAccuracy >= 3) {
-            update = true;
-            state_update_counter++;
-        }
-    } else {
-        if ((state_update_counter * STATE_SAVE_PERIOD) < millis()) {
-            update = true;
-            state_update_counter++;
-        }
-    }
-
-    if (update) {
-        sensor.getState(bsec_state);
-        check_IAQ_sensor_status();
-
-        Serial.println("#### Writing state to EEPROM:");
-        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++) {
-            EEPROM.write(i + 1, bsec_state[i]);
-            Serial.println(bsec_state[i], HEX);
-        }
-        Serial.println("");
-
-        EEPROM.write(0, BSEC_MAX_STATE_BLOB_SIZE);
-        EEPROM.commit();
-    }
-}
 
 void check_IAQ_sensor_status(void) {
     if (sensor.status != BSEC_OK) {
@@ -120,27 +53,22 @@ void check_IAQ_sensor_status(void) {
     }
 }
 
+
 void setup() {
     Serial.begin(115200);
 
     Serial.println("#### Setting up sensor.");
-    EEPROM.begin(BSEC_MAX_STATE_BLOB_SIZE + 1);
 
     Wire.begin();
     sensor.begin(BME680_I2C_ADDR_SECONDARY, Wire);
-
     check_IAQ_sensor_status();
-    sensor.setConfig(bsec_config_iaq);
-    check_IAQ_sensor_status();
-
-    load_state();
 
     bsec_virtual_sensor_t sensor_list[5] = {
-        BSEC_OUTPUT_IAQ,
+        BSEC_OUTPUT_STATIC_IAQ,
         BSEC_OUTPUT_CO2_EQUIVALENT,
         BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
         BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
-        BSEC_OUTPUT_RAW_PRESSURE
+        BSEC_OUTPUT_BREATH_VOC_EQUIVALENT
     };
 
     sensor.updateSubscription(sensor_list, 5, BSEC_SAMPLE_RATE_LP);
@@ -161,62 +89,43 @@ void setup() {
     Serial.println(WiFi.localIP());
     Serial.print("#### Hostname: ");
     Serial.println(WiFi.getHostname());
+    Serial.println("#### Wi-Fi Connected.");
 
-    // Route for root / web page
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/html", INDEX_HTML);
-    });
-    server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/plain", String(temperature).c_str());
-    });
-    server.on("/humidity", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/plain", String(humidity).c_str());
-    });
-    server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/plain", String(pressure / 100.0F).c_str());
-    });
-    server.on("/iaq", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/plain", String(iaq).c_str());
-    });
-    server.on("/co2", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/plain", String(co2Equivalent).c_str());
-    });
+    
 
-    server.begin();
-    Serial.println("#### Server Started.");
+    Serial.println("#### Setting up HomeKit.");
+    arduino_homekit_setup(&homekit_config);
+    Serial.println("#### Everything set up");
 }
 
+
 void loop() {
-    if (millis() - last_check > hour) {
-        if (iaq > 100) {
-            Serial.println("BAD QUALITY");
-
-            http.begin(IFTTT);
-            http.addHeader("Content-Type", "application/json");
-            int httpResponseCode = http.POST("{\"value1\":\"" + String(iaq) + "\"}");
-
-            if (httpResponseCode > 0) {
-                String response = http.getString();
-                Serial.println(httpResponseCode);
-                Serial.println(response);
-            } else {
-                Serial.print("Error on sending POST: ");
-                Serial.println(httpResponseCode);
-            }
-
-            http.end();
-        }
-        last_check = millis();
-    }
-
     if (sensor.run()) {
-        temperature = sensor.temperature;
-        pressure = sensor.pressure;
-        humidity = sensor.humidity;
-        co2Equivalent = sensor.co2Equivalent;
-        iaq = sensor.iaq;
+        Serial.print("Temperature: ");
+        Serial.println(sensor.temperature);
+        temperature_chara.value.float_value = sensor.temperature;
+        homekit_characteristic_notify(&temperature_chara, temperature_chara.value);
 
-        update_state();
+        Serial.print("Humidity: ");
+        Serial.println(sensor.humidity);
+        humidity_chara.value.float_value = sensor.humidity;
+        homekit_characteristic_notify(&humidity_chara, humidity_chara.value);
+
+        Serial.print("CO2: ");
+        Serial.println(sensor.co2Equivalent);
+        co2_chara.value.float_value = sensor.co2Equivalent;
+        homekit_characteristic_notify(&co2_chara, co2_chara.value);
+
+        Serial.print("VOC: ");
+        Serial.println(sensor.breathVocEquivalent);
+        voc_chara.value.float_value = sensor.breathVocEquivalent;
+        homekit_characteristic_notify(&voc_chara, voc_chara.value);
+
+        Serial.print("IAQ: ");
+        Serial.println(sensor.staticIaq);
+        float air_quality = 1 + (5 - 1) * ((sensor.staticIaq - 0)/(500 - 0));
+        iaq_chara.value.int_value = (int)air_quality;
+        homekit_characteristic_notify(&iaq_chara, iaq_chara.value);
     } else {
         check_IAQ_sensor_status();
     }
