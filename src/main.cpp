@@ -45,6 +45,7 @@ void log(String log_msg) {
     }
 
     log_content = log_content + log_msg;
+    log_count++;
 }
 
 
