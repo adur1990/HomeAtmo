@@ -4,23 +4,23 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 
+#include <AsyncTCP.h>
+#include "ESPAsyncWebServer.h"
+
 #include <homekit/types.h>
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
 #include <arduino_homekit_server.h>
 
 #include "bsec.h"
+
 #include "creds.h"
 
 
-/******* TIMER *******/
-uint64_t second = 1000;
-
-
-/******* SENSOR *******/
-Bsec sensor;
-void check_IAQ_sensor_status(void);
-
+/******* SERVER *******/
+AsyncWebServer server(80);
+String log_content = "";
+uint8_t log_count = 0;
 
 /******* HOMEKIT VARIABLES *******/
 extern "C" homekit_server_config_t homekit_config;
@@ -31,24 +31,41 @@ extern "C" homekit_characteristic_t co2_chara;
 extern "C" homekit_characteristic_t voc_chara;
 
 
+/******* SENSOR *******/
+Bsec sensor;
+void check_IAQ_sensor_status(void);
+
+
+void log(String log_msg) {
+    Serial.print(log_msg);
+
+    if (log_count == 200) {
+        log_content = "";
+        log_count = 0;
+    }
+
+    log_content = log_content + log_msg;
+}
+
+
 void check_IAQ_sensor_status(void) {
     if (sensor.status != BSEC_OK) {
         if (sensor.status < BSEC_OK) {
-            Serial.println("#### BSEC error: " + String(sensor.status));
+            log("#### BSEC error: " + String(sensor.status) + "\n");
             for (;;)
                 ;
         } else {
-            Serial.println("#### BSEC warning: " + String(sensor.status));
+            log("#### BSEC warning: " + String(sensor.status) + "\n");
         }
     }
 
     if (sensor.bme680Status != BME680_OK) {
         if (sensor.bme680Status < BME680_OK) {
-            Serial.println("#### BME680 error: " + String(sensor.bme680Status));
+            log("#### BME680 error: " + String(sensor.bme680Status) + "\n");
             for (;;)
                 ;
         } else {
-            Serial.println("#### BME680 warning: " + String(sensor.bme680Status));
+            log("#### BME680 warning: " + String(sensor.bme680Status) + "\n");
         }
     }
 }
@@ -57,7 +74,35 @@ void check_IAQ_sensor_status(void) {
 void setup() {
     Serial.begin(115200);
 
-    Serial.println("#### Setting up sensor.");
+
+    Serial.print("#### Connecting to WiFi");
+    WiFi.begin(SSID, PSK);
+
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("");
+
+    tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA ,"HomeAtmo");
+
+
+    server.on("/", HTTP_GET, [] (AsyncWebServerRequest *request) {
+        String message = "No message sent";
+        request->send(200, "text/plain", log_content);
+    });
+
+    server.begin();
+
+    log("#### WiFi connected.\n");
+    log("#### IP address: ");
+    log(WiFi.localIP());
+    log("\n#### Hostname: ");
+    log(WiFi.getHostname());
+    log("\n#### Wi-Fi Connected.\n");
+
+
+    log("#### Setting up sensor.\n");
 
     Wire.begin();
     sensor.begin(BME680_I2C_ADDR_SECONDARY, Wire);
@@ -74,61 +119,67 @@ void setup() {
     sensor.updateSubscription(sensor_list, 5, BSEC_SAMPLE_RATE_LP);
     check_IAQ_sensor_status();
 
-    Serial.print("#### Connecting to WiFi");
-    WiFi.begin(SSID, PSK);
-
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("");
-
-    tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA ,"HomeAtmo");
-    Serial.println("#### WiFi connected.");
-    Serial.print("#### IP address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("#### Hostname: ");
-    Serial.println(WiFi.getHostname());
-    Serial.println("#### Wi-Fi Connected.");
-
-    
-
-    Serial.println("#### Setting up HomeKit.");
+    log("#### Setting up HomeKit.\n");
     arduino_homekit_setup(&homekit_config);
-    Serial.println("#### Everything set up");
+
+    log("#### Everything set up\n");
 }
 
 
 void loop() {
     if (sensor.run()) {
-        Serial.print("Temperature: ");
-        Serial.println(sensor.temperature);
-        temperature_chara.value.float_value = sensor.temperature;
+        float tmp_temp = sensor.temperature;
+        float tmp_humi = sensor.humidity;
+        float tmp_co2 = sensor.co2Equivalent;
+        float tmp_voc = sensor.breathVocEquivalent;
+        float tmp_acc = sensor.iaqAccuracy;
+        float tmp_iaq = sensor.staticIaq;
+        float air_quality;
+        
+        if (tmp_acc == 0.0) {
+            air_quality = 0;
+        } else {
+            air_quality = 1 + (5 - 1) * ((tmp_iaq - 0)/(500 - 0));
+        }
+        
+
+        temperature_chara.value.float_value = tmp_temp;
         homekit_characteristic_notify(&temperature_chara, temperature_chara.value);
 
-        Serial.print("Humidity: ");
-        Serial.println(sensor.humidity);
-        humidity_chara.value.float_value = sensor.humidity;
+        humidity_chara.value.float_value = tmp_humi;
         homekit_characteristic_notify(&humidity_chara, humidity_chara.value);
 
-        Serial.print("CO2: ");
-        Serial.println(sensor.co2Equivalent);
-        co2_chara.value.float_value = sensor.co2Equivalent;
+        co2_chara.value.float_value = tmp_co2;
         homekit_characteristic_notify(&co2_chara, co2_chara.value);
 
-        Serial.print("VOC: ");
-        Serial.println(sensor.breathVocEquivalent);
-        voc_chara.value.float_value = sensor.breathVocEquivalent;
+        voc_chara.value.float_value = tmp_voc;
         homekit_characteristic_notify(&voc_chara, voc_chara.value);
 
-        Serial.print("IAQ: ");
-        Serial.println(sensor.staticIaq);
-        float air_quality = 1 + (5 - 1) * ((sensor.staticIaq - 0)/(500 - 0));
         iaq_chara.value.int_value = (int)air_quality;
         homekit_characteristic_notify(&iaq_chara, iaq_chara.value);
+
+
+        log("\nTemperature: ");
+        log(String(tmp_temp));
+
+        log("\nHumidity: ");
+        log(String(tmp_humi));
+
+        log("\nCO2: ");
+        log(String(tmp_co2));
+
+        log("\nVOC: ");
+        log(String(tmp_voc));
+
+        log("\nIAQ RAW: ");
+        log(String(tmp_iaq));
+
+        log("\nIAQ: ");
+        log(String(air_quality));
+
+        log("\nIAQ Acuuracy: ");
+        log(String(tmp_acc));
     } else {
         check_IAQ_sensor_status();
     }
-
-    vTaskDelay((second * 5) / portTICK_PERIOD_MS);
 }

@@ -33,7 +33,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(IDENTIFY, sensor_identify),
             NULL
         }),
-        HOMEKIT_SERVICE(TEMPERATURE_SENSOR, .primary=true, .characteristics=(homekit_characteristic_t*[]) {
+        HOMEKIT_SERVICE(TEMPERATURE_SENSOR, .characteristics=(homekit_characteristic_t*[]) {
             HOMEKIT_CHARACTERISTIC(NAME, TMP_IDENTIFIER),
             &temperature_chara,
             NULL
